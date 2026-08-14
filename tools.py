@@ -1,0 +1,40 @@
+from langchain.tools import tool
+import requests
+from bs4 import BeautifulSoup
+from tavily import TavilyClient
+import os
+from dotenv import load_dotenv
+from rich import print
+load_dotenv()
+
+tavily_api_key = os.getenv("TAVILY_API_KEY")
+tavily = TavilyClient(api_key=tavily_api_key) if tavily_api_key else None
+
+@tool
+def web_search(query: str) -> str:
+    """Search the web for recent web reliable information on a topic, Returns Titles, URLs and snippets"""
+    if not tavily:
+        return "TAVILY_API_KEY is not set. Please configure it to enable web search."
+
+    results = tavily.search(query=query,max_results=5)
+
+    out = []
+    for r in results["results"]:
+        out.append(
+            f'Title: {r["title"]}\nURL: {r["url"]}\nSnippet: {r["content"][:300]}\n'
+        )
+
+    return "\n----\n".join(out)
+
+@tool
+def scrape_url(url: str) -> str:
+    """Scrape and return clean text content froma given URL for deeper reading."""
+    try:
+        resp = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer"]):
+            tag.decompose()
+        return soup.get_text(separator=" ", strip=True)[:1200]
+    except Exception as e:
+        return f"Could not scrape URL: {str(e)}"
